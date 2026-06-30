@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AC Simulator — Health-Driven Climate</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --line:#232b36;
+    --ink:#e6edf3; --muted:#8b97a5;
+    --cool:#3fa9f5; --warm:#ff7a59; --hold:#43c59e;
+    --accent:#43c59e;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:"Inter",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg);color:var(--ink);font-family:var(--sans);
+    min-height:100vh;padding:32px 20px;
+    display:flex;flex-direction:column;align-items:center;gap:24px;
+  }
+  h1{font-size:20px;font-weight:600;letter-spacing:-.3px}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .wrap{width:100%;max-width:860px;display:grid;gap:20px;
+    grid-template-columns:1fr 1fr}
+  .panel{background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:22px}
+  .panel h2{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;
+    color:var(--muted);font-weight:600;margin-bottom:16px}
+  .full{grid-column:1/-1}
+
+  /* connection bar */
+  .conn{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .conn input{flex:1;min-width:160px;background:#0b0e13;border:1px solid var(--line);
+    color:var(--ink);padding:9px 12px;border-radius:8px;font-family:var(--mono);font-size:13px}
+  .conn button{background:var(--accent);color:#06231b;border:none;
+    padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px}
+  .conn button:hover{filter:brightness(1.1)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#555;flex:none}
+  .dot.on{background:var(--hold);box-shadow:0 0 8px var(--hold)}
+  .dot.err{background:var(--warm)}
+  .status{font-size:12px;color:var(--muted);font-family:var(--mono)}
+
+  /* sensor readouts */
+  .reads{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .read{background:#0b0e13;border:1px solid var(--line);border-radius:10px;padding:14px}
+  .read .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+  .read .val{font-family:var(--mono);font-size:30px;font-weight:600;margin-top:6px}
+  .read .unit{font-size:14px;color:var(--muted);font-weight:400}
+
+  /* AC big setpoint */
+  .setpoint{text-align:center}
+  .setpoint .num{font-family:var(--mono);font-size:72px;font-weight:700;line-height:1;
+    transition:color .6s}
+  .setpoint .num.cool{color:var(--cool)}
+  .setpoint .num.warm{color:var(--warm)}
+  .setpoint .num.hold{color:var(--hold)}
+  .setpoint .deg{font-size:28px;color:var(--muted)}
+  .mode{display:inline-block;margin-top:10px;padding:5px 14px;border-radius:20px;
+    font-size:12px;font-weight:600;letter-spacing:.5px}
+  .mode.cool{background:rgba(63,169,245,.15);color:var(--cool)}
+  .mode.warm{background:rgba(255,122,89,.15);color:var(--warm)}
+  .mode.hold{background:rgba(67,197,158,.15);color:var(--hold)}
+  .reason{color:var(--muted);font-size:13px;margin-top:14px;min-height:18px}
+
+  /* room visual */
+  .room{position:relative;height:170px;border-radius:12px;overflow:hidden;
+    border:1px solid var(--line);transition:background 1.2s}
+  .ac-unit{position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    width:120px;height:30px;background:#1c232d;border:1px solid var(--line);
+    border-radius:6px;display:flex;align-items:center;justify-content:center;
+    font-size:10px;color:var(--muted);letter-spacing:1px}
+  .vent{position:absolute;top:46px;left:50%;transform:translateX(-50%);
+    display:flex;gap:18px}
+  .stream{width:3px;height:0;border-radius:3px;opacity:.7}
+  .person{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+    font-size:40px;transition:filter .6s}
+  .roomtemp{position:absolute;bottom:12px;right:14px;font-family:var(--mono);
+    font-size:13px;color:var(--ink);background:rgba(0,0,0,.35);padding:4px 8px;border-radius:6px}
+
+  @keyframes fall{0%{height:0;opacity:0}30%{opacity:.7}100%{height:60px;opacity:0;transform:translateY(60px)}}
+  .blow .stream{animation:fall 1.3s linear infinite}
+  .blow .stream:nth-child(2){animation-delay:.25s}
+  .blow .stream:nth-child(3){animation-delay:.5s}
+  .blow .stream:nth-child(4){animation-delay:.75s}
+
+  /* log */
+  .log{font-family:var(--mono);font-size:12px;color:var(--muted);
+    max-height:150px;overflow-y:auto;line-height:1.7}
+  .log div{border-bottom:1px solid var(--line);padding:3px 0}
+  .log .c{color:var(--cool)} .log .w{color:var(--warm)} .log .h{color:var(--hold)}
+
+  @media(max-width:680px){.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <div>
+    <h1 style="text-align:center">Health-Driven AC Simulator</h1>
+    <div class="sub" style="text-align:center">Reads skin temp + heart rate from the ESP32, adjusts the room</div>
+  </div>
+
+  <div class="wrap">
+    <!-- connection -->
+    <div class="panel full">
+      <h2>ESP32 Connection</h2>
+      <div class="conn">
+        <span class="dot" id="dot"></span>
+        <input id="ip" placeholder="ESP32 IP, e.g. 192.168.1.42" value="192.168.4.1">
+        <button id="connect">Connect</button>
+        <span class="status" id="status">not connected</span>
+      </div>
+    </div>
+
+    <!-- sensor readings -->
+    <div class="panel">
+      <h2>Sensor Data</h2>
+      <div class="reads">
+        <div class="read">
+          <div class="label">Heart Rate</div>
+          <div class="val"><span id="bpm">--</span><span class="unit"> bpm</span></div>
+        </div>
+        <div class="read">
+          <div class="label">Skin Temp</div>
+          <div class="val"><span id="skin">--</span><span class="unit"> °C</span></div>
+        </div>
+      </div>
+      <div class="status" id="finger" style="margin-top:14px">Finger: —</div>
+    </div>
+
+    <!-- AC setpoint -->
+    <div class="panel setpoint">
+      <h2>AC Target</h2>
+      <div><span class="num hold" id="ac">24</span><span class="deg">°C</span></div>
+      <div class="mode hold" id="mode">HOLD</div>
+      <div class="reason" id="reason">Waiting for data…</div>
+    </div>
+
+    <!-- room -->
+    <div class="panel full">
+      <h2>Room</h2>
+      <div class="room" id="room">
+        <div class="ac-unit">AC UNIT</div>
+        <div class="vent" id="vent">
+          <div class="stream"></div><div class="stream"></div>
+          <div class="stream"></div><div class="stream"></div>
+        </div>
+        <div class="person" id="person">🧍</div>
+        <div class="roomtemp">Room <span id="roomtemp">24.0</span>°C</div>
+      </div>
+    </div>
+
+    <!-- log -->
+    <div class="panel full">
+      <h2>Decision Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+let ip = "", timer = null, roomTemp = 24.0, lastSp = null;
+
+function setConn(state, msg){
+  const d = $("dot");
+  d.className = "dot" + (state==="on"?" on":state==="err"?" err":"");
+  $("status").textContent = msg;
+}
+
+$("connect").onclick = () => {
+  ip = $("ip").value.trim();
+  if(!ip){ setConn("err","enter an IP"); return; }
+  if(timer) clearInterval(timer);
+  setConn("","connecting…");
+  poll();                       // immediate
+  timer = setInterval(poll, 1500);
+};
+
+async function poll(){
+  try{
+    const r = await fetch(`http://${ip}/data`, {cache:"no-store"});
+    if(!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    setConn("on","live");
+    render(d);
+  }catch(e){
+    setConn("err","no response — check IP / same WiFi");
+  }
+}
+
+function render(d){
+  $("bpm").textContent  = d.bpm > 0 ? d.bpm : "--";
+  $("skin").textContent = d.skin_temp.toFixed(1);
+  $("finger").textContent = "Finger: " + (d.finger ? "detected ✓" : "not placed");
+
+  const sp = d.ac_setpoint;
+  $("ac").textContent = sp.toFixed(0);
+
+  // mode = cool / warm / hold relative to neutral 24
+  let mode = "hold", label = "HOLD";
+  if(sp < 23.5){ mode="cool"; label="COOLING"; }
+  else if(sp > 24.5){ mode="warm"; label="WARMING"; }
+
+  $("ac").className   = "num " + mode;
+  $("mode").className = "mode " + mode;
+  $("mode").textContent = label;
+  $("reason").textContent = d.reason;
+
+  paintRoom(mode, sp);
+
+  if(sp !== lastSp){
+    lastSp = sp;
+    addLog(d, mode);
+  }
+}
+
+function paintRoom(mode, sp){
+  const room = $("room"), streams = document.querySelectorAll(".stream");
+  const colors = {cool:"#3fa9f5", warm:"#ff7a59", hold:"#43c59e"};
+  // tint streams + enable blowing when not holding
+  streams.forEach(s => s.style.background = colors[mode]);
+  $("vent").parentElement.classList.toggle("blow", mode!=="hold");
+
+  // room background drifts toward setpoint colour
+  const bg = {
+    cool:"linear-gradient(180deg,#0b1c2c,#0e1116)",
+    warm:"linear-gradient(180deg,#2c160e,#0e1116)",
+    hold:"linear-gradient(180deg,#0e1f1a,#0e1116)"
+  }[mode];
+  room.style.background = bg;
+
+  // animate room temp easing toward setpoint
+  roomTemp += (sp - roomTemp) * 0.08;
+  $("roomtemp").textContent = roomTemp.toFixed(1);
+
+  // person reacts
+  $("person").style.filter =
+    mode==="cool" ? "hue-rotate(180deg) brightness(1.1)" :
+    mode==="warm" ? "sepia(.6) saturate(2)" : "none";
+}
+
+function addLog(d, mode){
+  const cls = mode==="cool"?"c":mode==="warm"?"w":"h";
+  const t = new Date().toLocaleTimeString();
+  const line = document.createElement("div");
+  line.innerHTML = `<span class="${cls}">[${t}]</span> ` +
+    `bpm ${d.bpm} · skin ${d.skin_temp.toFixed(1)}°C → AC ${d.ac_setpoint.toFixed(0)}°C · ${d.reason}`;
+  $("log").prepend(line);
+  while($("log").children.length > 30) $("log").lastChild.remove();
+}
+
+// keep room temp easing even between polls for smoothness
+setInterval(()=>{ if(lastSp!==null){ paintRoom($("mode").textContent.toLowerCase().includes("cool")?"cool":$("mode").textContent.toLowerCase().includes("warm")?"warm":"hold", lastSp);} }, 400);
+</script>
+</body>
+</html>

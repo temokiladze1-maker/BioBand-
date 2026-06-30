@@ -1,12 +1,25 @@
-# Test Sketches
+# Hardware
 
-Standalone sketches to validate each layer before running the full firmware.
+This folder documents the hardware design.
 
-| Sketch | Board | Checks |
-|--------|-------|--------|
-| `test_1_i2c_scanner.ino` | XIAO | both sensors respond on I2C (0x48, 0x57) |
-| `test_2_sensor_check.ino` | XIAO | live temperature, IR, and BPM values |
-| `test_3_ble_scan.ino` | DevKit | DevKit can see the XIAO's BLE advertisement |
+## Working prototype
+The functional prototype is built on **development boards and a breadboard**:
+- Seeed XIAO ESP32-C3 (sensor node)
+- ESP32 DevKit V1 (analyzer)
+- Adafruit TMP117 + MAX30102 breakouts on a shared I2C bus
 
-Run them in order. If all three pass, the full firmware will work.
-See `../../docs/TEST_PROCEDURES.md` for formal verification procedures.
+See `../diagrams/wiring.png` for the connection diagram.
+
+## PCB concept
+`../diagrams/pcb_concept.png` shows a **conceptual** single-board layout that would
+integrate the XIAO and both sensors onto one compact 50 × 38 mm board for future
+production. It is a design concept; the delivered prototype uses dev boards.
+
+## Bill of materials
+| Component | Qty | Notes |
+|-----------|-----|-------|
+| XIAO ESP32-C3 | 1 | sensor node MCU |
+| ESP32 DevKit V1 | 1 | analyzer MCU |
+| Adafruit TMP117 | 1 | I2C 0x48 |
+| MAX30102 | 1 | I2C 0x57 |
+| Breadboard + jumper wires | 1 set | prototyping |
